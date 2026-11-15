@@ -1,6 +1,6 @@
 name: ci
 
-# No AWS credentials are configured anywhere in this workflow, and nothing is ever applied.
+# No AWS credentials are configured anywhere in this workflow, and nothing is ever applied or deployed.
 on:
   pull_request:
   push:
@@ -10,8 +10,11 @@ permissions:
   contents: read
 
 jobs:
-  check:
+  terraform:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform
     steps:
       - uses: actions/checkout@v4
 
@@ -45,3 +48,21 @@ jobs:
         run: |
           pip install checkov
           checkov -d . --framework terraform --quiet --compact
+
+  cdk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cdk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: cdk/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: npm run lint
+      - run: npm test
+      - run: npm run synth
