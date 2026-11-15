@@ -1,0 +1,47 @@
+name: ci
+
+# No AWS credentials are configured anywhere in this workflow, and nothing is ever applied.
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.10.6
+
+      - name: Format
+        run: tofu fmt -check -recursive
+
+      - name: Validate (root, bootstrap)
+        run: |
+          tofu init -backend=false && tofu validate
+          (cd bootstrap && tofu init -backend=false && tofu validate)
+
+      - name: Tests with mocked AWS provider
+        run: tofu test
+
+      - uses: terraform-linters/setup-tflint@v4
+      - name: tflint
+        run: |
+          tflint --init
+          tflint --recursive
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: checkov
+        run: |
+          pip install checkov
+          checkov -d . --framework terraform --quiet --compact
