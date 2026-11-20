@@ -110,7 +110,7 @@
     project_src: "{{ assay_prod_dir }}"
     profiles: [tunnel]
     state: present
-    pull: missing
+    pull: always # also refreshes the version-tagged database images; unchanged images are not recreated
     wait: true
     wait_timeout: "{{ assay_wait_timeout }}"
   register: assay_up

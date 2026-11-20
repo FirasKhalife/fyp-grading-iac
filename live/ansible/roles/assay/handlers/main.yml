@@ -5,6 +5,6 @@
     project_src: "{{ assay_prod_dir }}"
     profiles: [tunnel]
     state: present
-    pull: missing
+    pull: missing # just pulled by the deploy
     wait: true
     wait_timeout: "{{ assay_wait_timeout }}"

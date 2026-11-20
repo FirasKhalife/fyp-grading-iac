@@ -140,14 +140,17 @@ before the last midnight if it was down then. The other services purge their own
 
 `assay-update.timer` runs `/usr/local/lib/assay/update.sh` every 30 minutes (± 3):
 
-1. notes the image every running Assay service uses, then `docker compose pull`;
+1. notes the image every running app service uses (the `ghcr.io/firaskhalife/*` images tagged `ASSAY_TAG`), then
+   pulls them one service at a time, so an image that can't be pulled holds back only its own service;
 2. recreates **only** the services whose image changed, with `--wait`;
 3. if one doesn't become healthy: tags the previous images back, recreates the same services with them, records the
    failed image IDs in `/var/lib/assay-update/failed-images` (so the next run doesn't retry them), logs it, and the
    unit shows as failed. After a Keycloak update it also re-runs the persona reset.
 
-On the server: `journalctl -u assay-update`, `cat /var/lib/assay-update/last-result`. The third-party images are
-pinned by digest, so they change only when a compose change is deployed with `./deploy.sh`. Compose file changes
+On the server: `journalctl -u assay-update`, `cat /var/lib/assay-update/last-result`. The timer never touches the
+databases, RabbitMQ, Redis or cloudflared: their images are pinned by digest or (the derived Postgres and Mongo
+images) by a version tag, and they change only with `./deploy.sh`, which pulls every image and recreates only those
+that changed. Compose file changes
 (Dependabot bumps, edge config) are never pulled automatically: they go live when you run `./deploy.sh`. Pin
 `assay_image_tag` to a commit's short SHA to freeze the images.
 
@@ -243,3 +246,10 @@ Found while writing this; not made here, because another session is working in t
    (`compose.yml` comment and `edge.nginx.conf` agree). This deployment uses `http://edge:8080`.
 3. **`.env.example`** says `TUNNEL_TOKEN` comes "from the Cloudflare dashboard"; here it comes from OpenTofu.
    Worth one more line pointing at `fyp-grading-iac/live`.
+4. **Publish the derived database images first.** The `one-command-demo` branch moves prod to
+   `ghcr.io/firaskhalife/fyp-grading-postgres:16.16-alpine3.24` and `fyp-grading-mongo:7.0.48`. Once that is on
+   the `assay_compose_version` the host deploys, `./deploy.sh` fails at the pull until both are published and
+   public. Pin them by digest once they are, like the other third-party images.
+5. **`e2e/api-checks.py` and `e2e/security.sh`** are on `one-command-demo`, not on master yet. `verify.sh` runs
+   `api-checks.py` from your local checkout and `security.sh` from the server's clone, and reports a missing one as
+   skipped.
