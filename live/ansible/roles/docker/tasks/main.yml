@@ -1,0 +1,47 @@
+---
+# Docker CE and the compose plugin from Docker's own apt repository (docs.docker.com/engine/install/debian and
+# /ubuntu), with log rotation set for every container.
+- name: Remove the distribution's Docker packages
+  ansible.builtin.apt:
+    name: "{{ docker_conflicting_packages }}"
+    state: absent
+
+- name: Install what the repository setup needs
+  ansible.builtin.apt:
+    name: python3-debian # for deb822_repository
+    state: present
+
+- name: Add Docker's apt repository and signing key
+  ansible.builtin.deb822_repository:
+    name: docker
+    types: deb
+    uris: https://download.docker.com/linux/{{ ansible_facts.distribution | lower }}
+    suites: "{{ ansible_facts.distribution_release }}"
+    components: stable
+    architectures: amd64
+    signed_by: https://download.docker.com/linux/{{ ansible_facts.distribution | lower }}/gpg
+  register: docker_repo
+
+- name: Install Docker CE and the compose plugin
+  ansible.builtin.apt:
+    name: "{{ docker_packages }}"
+    state: present
+    update_cache: "{{ docker_repo.changed }}"
+
+- name: Configure the Docker daemon
+  ansible.builtin.copy:
+    src: daemon.json
+    dest: /etc/docker/daemon.json
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker
+
+- name: Run Docker at boot
+  ansible.builtin.systemd_service:
+    name: docker
+    enabled: true
+    state: started
+
+- name: Apply a changed daemon configuration now
+  ansible.builtin.meta: flush_handlers

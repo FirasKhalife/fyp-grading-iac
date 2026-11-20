@@ -1,0 +1,11 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Assay: look for new images about every 30 minutes
+
+[Timer]
+OnCalendar={{ assay_update_on_calendar }}
+RandomizedDelaySec=3min
+Persistent=false
+
+[Install]
+WantedBy=timers.target

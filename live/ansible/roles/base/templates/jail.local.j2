@@ -1,0 +1,13 @@
+# {{ ansible_managed }}
+[DEFAULT]
+bantime = {{ base_fail2ban_bantime }}
+findtime = {{ base_fail2ban_findtime }}
+maxretry = {{ base_fail2ban_maxretry }}
+banaction = ufw
+banaction_allports = ufw
+
+[sshd]
+enabled = true
+port = 22
+# Debian 12+ has no /var/log/auth.log by default: read sshd's log from the journal.
+backend = systemd

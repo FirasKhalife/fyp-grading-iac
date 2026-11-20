@@ -1,0 +1,11 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Assay: reapply the Keycloak realm settings and reset the demo personas
+Documentation=https://github.com/FirasKhalife/fyp-grading-docker-compose/blob/master/docs/deploy-hardening.md
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart={{ assay_lib }}/keycloak-reset.sh
+TimeoutStartSec=15min

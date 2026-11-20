@@ -1,0 +1,24 @@
+---
+# Run once, on a fresh server, as root: creates the deploy user with the SSH key and passwordless sudo, so site.yml
+# can sign in as that user. site.yml then turns root login off, so this playbook can't run a second time (and
+# doesn't need to).
+#
+#   ../deploy.sh bootstrap          (root's key from the Netcup installer)
+#   ../deploy.sh bootstrap -k       (root's password instead; needs sshpass)
+- name: Bootstrap the deploy user
+  hosts: assay
+  remote_user: root
+  gather_facts: false
+  vars:
+    ansible_user: root
+
+  tasks:
+    - name: Make sure Python is there for Ansible
+      ansible.builtin.raw: test -x /usr/bin/python3 || (apt-get update -q && DEBIAN_FRONTEND=noninteractive apt-get install -y -q python3)
+      register: python_install
+      changed_when: python_install.stdout | length > 0
+
+    - name: Create the deploy user
+      ansible.builtin.include_role:
+        name: base
+        tasks_from: user

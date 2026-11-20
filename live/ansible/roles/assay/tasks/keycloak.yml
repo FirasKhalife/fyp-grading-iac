@@ -1,0 +1,23 @@
+---
+# docs/deploy-hardening.md, section 3. The first start created the master admin from KEYCLOAK_ADMIN_USER (the
+# bootstrap one). Replace it with a permanent admin whose password exists only in the host's .env, then point
+# KEYCLOAK_ADMIN_USER / KEYCLOAK_ADMIN_PASSWORD at it, so every script that needs kcadm.sh signs in as it.
+#
+# No 2FA on it: the admin console is never published, and the only client is kcadm.sh through docker exec on the
+# host, which can't answer an OTP prompt.
+- name: Replace the bootstrap admin with a permanent one
+  ansible.builtin.command: "{{ assay_lib }}/keycloak-rotate-admin.sh {{ assay_keycloak_admin }}"
+  register: assay_rotate
+  changed_when: "'ROTATED' in assay_rotate.stdout"
+  notify: Recreate Keycloak with the permanent admin
+
+# Before the reset below, which signs in as the permanent admin.
+- name: Recreate Keycloak now if its admin changed
+  ansible.builtin.meta: flush_handlers
+
+# The realm import never updates an existing realm, so the realm settings and the personas are applied to the
+# running Keycloak after every deploy that changed something (and nightly, by assay-keycloak-reset.timer).
+- name: Apply the realm settings and reset the demo personas
+  ansible.builtin.command: "{{ assay_lib }}/keycloak-reset.sh"
+  when: assay_up.changed or assay_rotate.changed or assay_checkout_result.changed or assay_force_keycloak_reset | bool
+  changed_when: true

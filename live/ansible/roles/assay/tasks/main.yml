@@ -1,0 +1,142 @@
+---
+- name: Check the deploy settings
+  ansible.builtin.assert:
+    that:
+      - assay_public_url is match('^https://[a-z0-9.-]+$')
+      - assay_tunnel_token | length > 0
+    fail_msg: >-
+      assay_public_url must be https://<host> (no path), and the tunnel token must be set: run this through
+      ../deploy.sh, which reads it from the OpenTofu state, or export ASSAY_TUNNEL_TOKEN.
+    quiet: true
+
+- name: Install what the stack's scripts need
+  ansible.builtin.apt:
+    name: [git, python3, util-linux]
+    state: present
+
+# ---------------------------------------------------------------- the compose files
+# The host runs the compose repository's own files (prod/compose.yml, edge.nginx.conf, and the scripts and checks
+# they come with), cloned from the public repository at assay_compose_version. The .env is never in git.
+- name: Create the stack's directory
+  ansible.builtin.file:
+    path: "{{ assay_root }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Check out the compose repository
+  ansible.builtin.git:
+    repo: "{{ assay_compose_repo }}"
+    dest: "{{ assay_checkout }}"
+    version: "{{ assay_compose_version }}"
+    force: false
+  register: assay_checkout_result
+
+# Only if missing: the databases are initialised with these passwords, so they must never change on a host that
+# has data. 32 random letters and digits each, like run-demo.sh.
+- name: Create the host's .env (first deploy only)
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ assay_env_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+    force: false
+  no_log: true
+
+- name: Keep the .env private
+  ansible.builtin.file:
+    path: "{{ assay_env_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Set the managed .env values
+  ansible.builtin.lineinfile:
+    path: "{{ assay_env_file }}"
+    regexp: "^{{ item.key }}="
+    line: "{{ item.key }}={{ item.value }}"
+  loop:
+    - {key: PUBLIC_URL, value: "{{ assay_public_url }}"}
+    - {key: ASSAY_TAG, value: "{{ assay_image_tag }}"}
+    - {key: TUNNEL_TOKEN, value: "{{ assay_tunnel_token }}"}
+  loop_control:
+    label: "{{ item.key }}"
+  no_log: true
+  register: assay_env_result
+
+# ---------------------------------------------------------------- host scripts
+- name: Describe the stack for the host scripts
+  ansible.builtin.template:
+    src: default-assay.j2
+    dest: /etc/default/assay
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Create the scripts' directory
+  ansible.builtin.file:
+    path: "{{ assay_lib }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the host scripts
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ assay_lib }}/{{ item }}"
+    owner: root
+    group: root
+    mode: "{{ '0644' if item == 'common.sh' else '0755' }}"
+  loop: [common.sh, compose.sh, update.sh, keycloak-rotate-admin.sh, keycloak-reset.sh, copy-limit.sh, security-check.sh]
+
+- name: Put the host scripts on PATH
+  ansible.builtin.file:
+    src: "{{ assay_lib }}/{{ item.src }}"
+    dest: /usr/local/bin/{{ item.dest }}
+    state: link
+  loop:
+    - {src: compose.sh, dest: assay-compose}
+    - {src: update.sh, dest: assay-update}
+    - {src: keycloak-reset.sh, dest: assay-keycloak-reset}
+    - {src: copy-limit.sh, dest: assay-copy-limit}
+    - {src: security-check.sh, dest: assay-security-check}
+
+# ---------------------------------------------------------------- the stack
+- name: Start the stack and wait until every container is healthy
+  community.docker.docker_compose_v2:
+    project_src: "{{ assay_prod_dir }}"
+    profiles: [tunnel]
+    state: present
+    pull: missing
+    wait: true
+    wait_timeout: "{{ assay_wait_timeout }}"
+  register: assay_up
+
+- name: Keycloak
+  ansible.builtin.import_tasks: keycloak.yml
+
+# ---------------------------------------------------------------- timers
+- name: Install the systemd units
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: /etc/systemd/system/{{ item }}
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - assay-update.service
+    - assay-update.timer
+    - assay-keycloak-reset.service
+    - assay-keycloak-reset.timer
+  register: assay_units
+
+- name: Turn the timers on
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+    daemon_reload: "{{ assay_units.changed }}"
+  loop: [assay-update.timer, assay-keycloak-reset.timer]

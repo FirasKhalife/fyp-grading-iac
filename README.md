@@ -8,6 +8,7 @@ Two parallel descriptions of the same AWS deployment of the FYP grading platform
 |---|---|---|
 | [`terraform/`](terraform/) | OpenTofu/Terraform: VPC module, one private instance, SSM, KMS, SSM Parameter Store secrets, S3 state | [terraform/README.md](terraform/README.md) |
 | [`cdk/`](cdk/) | AWS CDK v2 in TypeScript: the same design, plus cdk-nag security rules | [cdk/README.md](cdk/README.md) |
+| [`live/`](live/) | **The real deployment**: OpenTofu for Cloudflare (tunnel, DNS, rate limit) and Ansible for one Netcup VPS | [live/README.md](live/README.md) |
 
 ## The design, in one picture
 

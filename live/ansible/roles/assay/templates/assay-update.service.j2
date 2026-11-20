@@ -1,0 +1,14 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Assay: pull new images, recreate what changed, roll back on failure
+Documentation=https://github.com/FirasKhalife/fyp-grading-iac/tree/master/live
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart={{ assay_lib }}/update.sh
+Nice=10
+# Long enough for a pull, a --wait and a rollback with its own --wait.
+TimeoutStartSec=45min

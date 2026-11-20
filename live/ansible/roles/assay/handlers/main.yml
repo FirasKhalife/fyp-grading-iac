@@ -1,0 +1,10 @@
+---
+# The rotated admin changes Keycloak's environment in .env: recreate it, so its container matches the file.
+- name: Recreate Keycloak with the permanent admin
+  community.docker.docker_compose_v2:
+    project_src: "{{ assay_prod_dir }}"
+    profiles: [tunnel]
+    state: present
+    pull: missing
+    wait: true
+    wait_timeout: "{{ assay_wait_timeout }}"
