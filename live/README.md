@@ -123,7 +123,9 @@ What `./deploy.sh` (`site.yml`) does, in order:
      repository's own `prod/compose.yml`, `edge.nginx.conf`, scripts and checks;
    - creates `docker-compose/prod/.env` **only if it is missing**: 32-character random secrets, like `run-demo.sh`.
      It is never regenerated (the databases were initialised with those passwords). `PUBLIC_URL`, `ASSAY_TAG` and
-     `TUNNEL_TOKEN` are kept in line on every run;
+     `TUNNEL_TOKEN` are kept in line on every run. Nothing here sets the services' environment by hand: values
+     derived from `PUBLIC_URL`, such as `AUTH_ISSUER_URI=${PUBLIC_URL}/realms/assay` (the token issuer the gateway
+     and services accept), come from `prod/compose.yml` itself;
    - `docker compose --profile tunnel up -d --wait`.
 4. **Keycloak** (docs/deploy-hardening.md, section 3): on the first deploy, a permanent master-realm admin
    (`assay-admin`) replaces the bootstrap one, with a random password that exists only in the host's `.env`;
@@ -253,3 +255,7 @@ Found while writing this; not made here, because another session is working in t
 5. **`e2e/api-checks.py` and `e2e/security.sh`** are on `one-command-demo`, not on master yet. `verify.sh` runs
    `api-checks.py` from your local checkout and `security.sh` from the server's clone, and reports a missing one as
    skipped.
+6. **Merge `review-leftovers` before the first deploy.** That branch adds `AUTH_ISSUER_URI` to the gateway and the
+   four services (only tokens Keycloak issued for the app's clients are accepted). The host deploys
+   `assay_compose_version` (master), so until the branch is merged the server runs without that check, and
+   `verify.sh`'s "admin-cli token is rejected" check fails. Nothing on the host needs changing once it is merged.

@@ -3,8 +3,8 @@
 #
 #   live/verify.sh [--skip-playwright] [--skip-host] [--keep-copy-limit]
 #
-# 1. edge      the landing page, HTTPS redirect and HSTS; a persona token; /admin, /realms/master, /actuator and
-#              /eureka answer 404 from outside
+# 1. edge      the landing page, HTTPS redirect and HSTS; a persona token the API accepts, and an admin-cli token
+#              it rejects with 401; /admin, /realms/master, /actuator and /eureka answer 404 from outside
 # 2. ports     from this machine, only 22 answers on the server's address (needs live/ansible/inventory.yml)
 # 3. smoke     the compose repo's e2e/smoke.sh against the public URL
 # 4. api       the compose repo's e2e/api-checks.py against the public URL (skipped until it is in the repo)
@@ -108,6 +108,19 @@ step "1. edge: landing page, HTTPS, closed paths"
   tok="$(curl -s "$URL/realms/assay/protocol/openid-connect/token" -d grant_type=password -d client_id=assay-spa \
     -d username=jane.smith -d "password=$PASSWORD" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("access_token",""))' 2>/dev/null)"
   check "persona sign-in at the token endpoint" test -n "$tok"
+  code="$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $tok" "$URL/api/notifications")"
+  check "the persona's token is accepted by the API ($code)" test "$code" = 200
+  # The services accept only tokens issued for the app's own clients (AUTH_ISSUER_URI and the client check): a
+  # token from another client of the same realm, such as Keycloak's built-in admin-cli, must get 401. If the realm
+  # doesn't issue admin-cli a token at all, there is nothing to reject.
+  other="$(curl -s "$URL/realms/assay/protocol/openid-connect/token" -d grant_type=password -d client_id=admin-cli \
+    -d username=jane.smith -d "password=$PASSWORD" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("access_token",""))' 2>/dev/null)"
+  if [ -n "$other" ]; then
+    code="$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $other" "$URL/api/notifications")"
+    check "an admin-cli token is rejected by the API ($code)" test "$code" = 401
+  else
+    echo "  ok   admin-cli gets no token in the assay realm (nothing to reject)"
+  fi
   for path in /admin /admin/ /admin/master/console/ /realms/master /realms/master/ \
     /realms/master/protocol/openid-connect/token /actuator /actuator/health /actuator/env /eureka /eureka/apps; do
     code="$(curl -s -o /dev/null -w '%{http_code}' "$URL$path")"
