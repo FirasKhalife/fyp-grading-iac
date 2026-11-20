@@ -235,27 +235,14 @@ systemctl list-timers 'assay-*'
 - **Locked out of SSH.** Netcup's control panel has a VNC console; root has no password there unless you set one in
   the installer. Reinstalling the server and running steps 3–4 again rebuilds everything.
 
-## Changes the compose repository needs
+## Compose repository prerequisites
 
-Found while writing this; not made here, because another session is working in that repository.
+Everything this deployment needs from `fyp-grading-docker-compose` is on its `master` (merged 20 Nov 2026):
 
-1. **`scripts/keycloak-reset-personas.sh` fails against the production Keycloak.** Its `kc()` runs `kcadm.sh`
-   without `--config`, so kcadm tries to write its session to `~/.keycloak` in a read-only root filesystem. Fix: add
-   `--config /tmp/kcadm.config` to `kc()` (and to the `partialImport` call, which calls `docker exec` itself), as
-   `e2e/security.sh` already does. Until then, `assay-keycloak-reset` on the server adds it through a small `docker`
-   shim, and switches the shim off by itself once the script contains `--config`.
-2. **`docs/deploy-hardening.md`, section 2** says to route the tunnel to `http://edge:80`; the edge listens on 8080
-   (`compose.yml` comment and `edge.nginx.conf` agree). This deployment uses `http://edge:8080`.
-3. **`.env.example`** says `TUNNEL_TOKEN` comes "from the Cloudflare dashboard"; here it comes from OpenTofu.
-   Worth one more line pointing at `fyp-grading-iac/live`.
-4. **Publish the derived database images first.** The `one-command-demo` branch moves prod to
-   `ghcr.io/firaskhalife/fyp-grading-postgres:16.16-alpine3.24` and `fyp-grading-mongo:7.0.48`. Once that is on
-   the `assay_compose_version` the host deploys, `./deploy.sh` fails at the pull until both are published and
-   public. Pin them by digest once they are, like the other third-party images.
-5. **`e2e/api-checks.py` and `e2e/security.sh`** are on `one-command-demo`, not on master yet. `verify.sh` runs
-   `api-checks.py` from your local checkout and `security.sh` from the server's clone, and reports a missing one as
-   skipped.
-6. **Merge `review-leftovers` before the first deploy.** That branch adds `AUTH_ISSUER_URI` to the gateway and the
-   four services (only tokens Keycloak issued for the app's clients are accepted). The host deploys
-   `assay_compose_version` (master), so until the branch is merged the server runs without that check, and
-   `verify.sh`'s "admin-cli token is rejected" check fails. Nothing on the host needs changing once it is merged.
+- `scripts/keycloak-reset-personas.sh` passes `--config` to kcadm, since the production Keycloak's root is read-only.
+- The derived Postgres and MongoDB images are published, public and pinned by digest.
+- `e2e/api-checks.py` and `e2e/security.sh` are there for `verify.sh`.
+- The gateway and services check the token issuer and client (`AUTH_ISSUER_URI`, set in `prod/compose.yml` from
+  `PUBLIC_URL`).
+
+Master was checked with the published `latest` images: smoke 27/27, API checks 64/64, security 37/37.
