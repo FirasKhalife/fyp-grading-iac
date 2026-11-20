@@ -1,0 +1,14 @@
+# {{ ansible_managed }}
+# SSH keys only, the deploy user only. Nobody signs in by hand; Ansible and live/verify.sh use the deploy key.
+PermitRootLogin no
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PubkeyAuthentication yes
+AuthenticationMethods publickey
+PermitEmptyPasswords no
+AllowUsers {{ base_deploy_user }}
+MaxAuthTries 3
+LoginGraceTime 30
+X11Forwarding no
+AllowAgentForwarding no
+AllowTcpForwarding no

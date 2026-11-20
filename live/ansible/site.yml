@@ -1,0 +1,24 @@
+---
+# The whole server, from a bootstrapped host to a running demo. Safe to run again: every task checks before it
+# changes anything.
+#
+#   ../deploy.sh                    (reads the tunnel token from ../tofu and runs this playbook)
+#   ../deploy.sh site --check --diff
+- name: Assay on one Netcup VPS
+  hosts: assay
+  become: true
+
+  pre_tasks:
+    - name: Check the operating system
+      ansible.builtin.assert:
+        that:
+          - (ansible_facts.distribution == 'Debian' and ansible_facts.distribution_major_version in ['12', '13'])
+            or (ansible_facts.distribution == 'Ubuntu' and ansible_facts.distribution_version == '24.04')
+          - ansible_facts.architecture == 'x86_64'
+        fail_msg: Supported are Debian 12, Debian 13 and Ubuntu 24.04 on amd64.
+        quiet: true
+
+  roles:
+    - base
+    - docker
+    - assay

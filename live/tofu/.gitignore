@@ -1,0 +1,6 @@
+# Local, encrypted state: never committed (it holds the tunnel secret).
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log

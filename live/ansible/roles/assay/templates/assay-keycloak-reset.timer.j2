@@ -1,0 +1,10 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Assay: nightly Keycloak persona reset, just after the services' midnight purge (host time, {{ base_timezone | default('Europe/Paris') }})
+
+[Timer]
+OnCalendar={{ assay_keycloak_reset_on_calendar }}
+Persistent=true
+
+[Install]
+WantedBy=timers.target

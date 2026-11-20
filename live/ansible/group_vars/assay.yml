@@ -1,0 +1,19 @@
+---
+# Connection: every run after bootstrap.yml signs in as the deploy user with the key below (passwordless sudo).
+ansible_user: "{{ base_deploy_user }}"
+ansible_ssh_private_key_file: ~/.ssh/assay_netcup
+
+# The public key that goes on the server, for the deploy user (and, by bootstrap.yml, nothing else).
+base_deploy_user: deploy
+base_deploy_pubkey_file: ~/.ssh/assay_netcup.pub
+
+# Must match the hostname in ../tofu (output public_url).
+assay_public_url: https://assay.firaskhalife.dev
+
+# The compose repository the host runs (public, cloned over HTTPS). A branch, tag or commit SHA. A commit SHA makes
+# a deploy repeatable; master follows what is merged.
+assay_compose_version: master
+
+# Image tag for every ghcr.io/firaskhalife/* image. "latest" lets the update timer roll out new builds; a commit's
+# short SHA pins a release (the timer then finds nothing to update).
+assay_image_tag: latest

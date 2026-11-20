@@ -1,0 +1,176 @@
+---
+- name: Deploy user
+  ansible.builtin.import_tasks: user.yml
+
+- name: Install the base packages
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - fail2ban
+      - python3-systemd # fail2ban reads sshd's log from the journal
+      - ufw
+      - unattended-upgrades
+    state: present
+
+- name: Read the installed packages
+  ansible.builtin.package_facts:
+
+# ---------------------------------------------------------------- time
+- name: Set the time zone
+  community.general.timezone:
+    name: "{{ base_timezone }}"
+
+# Keep chrony if the image ships it; otherwise systemd-timesyncd (they conflict).
+- name: Install systemd-timesyncd
+  ansible.builtin.apt:
+    name: systemd-timesyncd
+    state: present
+  when: "'chrony' not in ansible_facts.packages"
+
+- name: Keep time with NTP
+  ansible.builtin.systemd_service:
+    name: "{{ 'chrony' if 'chrony' in ansible_facts.packages else 'systemd-timesyncd' }}"
+    enabled: true
+    state: started
+
+# ---------------------------------------------------------------- SSH
+# sshd uses the first value it reads, and Debian's sshd_config includes sshd_config.d/*.conf first, in name order,
+# so 00- wins over the image's own drop-ins (e.g. a cloud-init 50-cloud-init.conf that allows passwords).
+- name: Harden sshd
+  ansible.builtin.template:
+    src: sshd.conf.j2
+    dest: /etc/ssh/sshd_config.d/00-assay.conf
+    owner: root
+    group: root
+    mode: "0644"
+    validate: /usr/sbin/sshd -t -f %s
+  notify: Reload sshd
+
+# ---------------------------------------------------------------- firewall
+- name: Allow SSH in (rate-limited by ufw)
+  community.general.ufw:
+    rule: limit
+    port: "22"
+    proto: tcp
+    comment: ssh
+
+- name: Deny every other inbound connection
+  community.general.ufw:
+    direction: incoming
+    default: deny
+
+- name: Allow outbound connections
+  community.general.ufw:
+    direction: outgoing
+    default: allow
+
+- name: Turn the firewall on
+  community.general.ufw:
+    state: enabled
+
+- name: Configure fail2ban for sshd
+  ansible.builtin.template:
+    src: jail.local.j2
+    dest: /etc/fail2ban/jail.local
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart fail2ban
+
+- name: Run fail2ban
+  ansible.builtin.systemd_service:
+    name: fail2ban
+    enabled: true
+    state: started
+
+# ---------------------------------------------------------------- upgrades
+- name: Turn on unattended upgrades
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      // Managed by Ansible (fyp-grading-iac/live).
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+      APT::Periodic::AutocleanInterval "7";
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Configure unattended upgrades
+  ansible.builtin.template:
+    src: unattended-upgrades.j2
+    dest: /etc/apt/apt.conf.d/52assay-unattended-upgrades
+    owner: root
+    group: root
+    mode: "0644"
+
+# ---------------------------------------------------------------- memory
+- name: Look for the swapfile
+  ansible.builtin.stat:
+    path: "{{ base_swapfile }}"
+  register: base_swap_stat
+
+- name: Create the swapfile
+  when: not base_swap_stat.stat.exists
+  block:
+    - name: Allocate the swapfile
+      ansible.builtin.command: fallocate -l {{ base_swap_size_mb }}M {{ base_swapfile }}
+      changed_when: true
+
+    - name: Make the swapfile private
+      ansible.builtin.file:
+        path: "{{ base_swapfile }}"
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Format the swapfile
+      ansible.builtin.command: mkswap {{ base_swapfile }}
+      changed_when: true
+
+- name: Check which swap is active
+  ansible.builtin.command: swapon --show=NAME --noheadings
+  register: base_swap_active
+  changed_when: false
+
+- name: Turn the swapfile on
+  ansible.builtin.command: swapon {{ base_swapfile }}
+  when: base_swapfile not in base_swap_active.stdout_lines
+  changed_when: true
+
+- name: Turn the swapfile on at boot
+  ansible.posix.mount:
+    src: "{{ base_swapfile }}"
+    path: none
+    fstype: swap
+    opts: sw
+    state: present
+
+- name: Use swap only under pressure
+  ansible.posix.sysctl:
+    name: vm.swappiness
+    value: "{{ base_swappiness }}"
+    sysctl_file: /etc/sysctl.d/90-assay.conf
+    state: present
+
+# ---------------------------------------------------------------- logs
+- name: Create the journald drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/journald.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Cap the journal's disk use
+  ansible.builtin.copy:
+    dest: /etc/systemd/journald.conf.d/90-assay.conf
+    content: |
+      # Managed by Ansible (fyp-grading-iac/live).
+      [Journal]
+      SystemMaxUse={{ base_journal_max_use }}
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart journald

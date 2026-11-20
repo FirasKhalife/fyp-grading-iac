@@ -1,0 +1,8 @@
+// {{ ansible_managed }}
+// The distribution's own 50unattended-upgrades picks the origins (security updates, and on Debian the point
+// releases); this only adds clean-up and the reboot policy. Docker's packages are not included: a dockerd upgrade
+// restarts the daemon, so it is left to a deliberate re-run of the playbook or `apt upgrade`.
+Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
+Unattended-Upgrade::Remove-Unused-Dependencies "true";
+Unattended-Upgrade::Automatic-Reboot "{{ 'true' if base_auto_reboot else 'false' }}";
+Unattended-Upgrade::Automatic-Reboot-Time "{{ base_auto_reboot_time }}";

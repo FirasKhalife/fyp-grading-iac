@@ -1,0 +1,29 @@
+---
+assay_public_url: https://assay.firaskhalife.dev
+assay_compose_repo: https://github.com/FirasKhalife/fyp-grading-docker-compose.git
+assay_compose_version: master
+assay_image_tag: latest
+
+# From ../tofu (output tunnel_token); ../deploy.sh puts it in ASSAY_TUNNEL_TOKEN without printing it.
+assay_tunnel_token: "{{ lookup('ansible.builtin.env', 'ASSAY_TUNNEL_TOKEN') }}"
+
+assay_root: /opt/assay
+assay_checkout: "{{ assay_root }}/fyp-grading-docker-compose"
+assay_prod_dir: "{{ assay_checkout }}/docker-compose/prod"
+assay_env_file: "{{ assay_prod_dir }}/.env"
+assay_lib: /usr/local/lib/assay
+
+# Keycloak's master realm: the bootstrap admin from the first start is replaced by this permanent one.
+assay_keycloak_bootstrap_admin: bootstrap-admin
+assay_keycloak_admin: assay-admin
+
+# Timers (host time, Europe/Paris). The services purge every demo copy at midnight themselves; the persona reset runs
+# just after it.
+assay_update_on_calendar: "*:00/30"
+assay_keycloak_reset_on_calendar: "*-*-* 00:05:00"
+
+# Seconds `docker compose up --wait` may take. A first start on 4 shared vCPUs takes 2-3 minutes.
+assay_wait_timeout: 900
+
+# Run the Keycloak persona reset on this run even if nothing changed.
+assay_force_keycloak_reset: false

@@ -1,0 +1,39 @@
+name: uptime
+
+# Every 15 minutes: is the live demo up? A failed run makes GitHub email the person who last changed the schedule
+# below. Off until the repository variable ASSAY_UPTIME_ENABLED is "true" (Settings > Secrets and variables >
+# Actions > Variables), so it doesn't fail every 15 minutes before the server exists. ASSAY_URL overrides the URL.
+# GitHub turns scheduled workflows off after 60 days without activity in a public repository (it emails first).
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+jobs:
+  check:
+    if: vars.ASSAY_UPTIME_ENABLED == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      ASSAY_URL: ${{ vars.ASSAY_URL || 'https://assay.firaskhalife.dev' }}
+    steps:
+      - name: Landing page
+        run: |
+          curl -fsS --retry 2 --retry-delay 20 --retry-all-errors --max-time 20 -A assay-uptime-check \
+            -o index.html "$ASSAY_URL/"
+          grep -q '<title>Assay</title>' index.html
+
+      # A real sign-in with a public demo persona (the password is public on purpose): Keycloak, its database and
+      # the edge route all have to work.
+      - name: Token endpoint
+        run: |
+          curl -fsS --retry 2 --retry-delay 20 --retry-all-errors --max-time 20 -A assay-uptime-check \
+            -o token.json "$ASSAY_URL/realms/assay/protocol/openid-connect/token" \
+            -d grant_type=password -d client_id=assay-spa -d username=jane.smith -d password=assay-demo
+          python3 -c 'import json; t = json.load(open("token.json")); assert t.get("access_token"), "no access_token"'

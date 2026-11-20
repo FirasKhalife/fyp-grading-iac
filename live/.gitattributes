@@ -1,0 +1,2 @@
+# Everything here runs on Linux (WSL, the server, CI).
+* text=auto eol=lf

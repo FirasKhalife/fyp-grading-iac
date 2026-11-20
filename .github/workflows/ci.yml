@@ -49,6 +49,25 @@ jobs:
           pip install checkov
           checkov -d . --framework terraform --quiet --compact
 
+  # The live deployment (Netcup + Cloudflare): offline checks only, no Cloudflare token, no SSH key.
+  live:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.13.9
+          tofu_wrapper: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Ansible
+        run: |
+          pip install ansible-core==2.22.0 ansible-lint==26.11.0
+          (cd live/ansible && ANSIBLE_CONFIG=ansible.cfg ansible-galaxy collection install -r requirements.yml -p collections)
+      - name: Checks (tofu fmt/validate, ansible-lint, syntax-check, ShellCheck)
+        run: live/check.sh
+
   cdk:
     runs-on: ubuntu-latest
     defaults:

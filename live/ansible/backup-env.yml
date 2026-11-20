@@ -1,0 +1,61 @@
+---
+# Optional: copy the host's .env to this machine, encrypted with ansible-vault. It is the only state on the server
+# worth keeping (README, "Backups"); one file a day, so running it twice the same day changes nothing.
+#
+#   ../deploy.sh backup-env
+#
+# The vault password file (default ~/.config/assay/vault-pass) must exist; keep a copy of it in your password manager.
+# Read a backup with: ansible-vault view --vault-password-file ~/.config/assay/vault-pass <file>
+- name: Back up the host's .env, encrypted
+  hosts: assay
+  become: true
+  gather_facts: false
+  vars:
+    backup_dir: "{{ lookup('ansible.builtin.env', 'HOME') }}/.config/assay/backups"
+    backup_vault_password_file: "{{ lookup('ansible.builtin.env', 'HOME') }}/.config/assay/vault-pass"
+    backup_file: "{{ backup_dir }}/{{ inventory_hostname }}-env-{{ now(fmt='%Y-%m-%d') }}.vault"
+    assay_env_file: /opt/assay/fyp-grading-docker-compose/docker-compose/prod/.env
+
+  tasks:
+    - name: Check the vault password file
+      ansible.builtin.stat:
+        path: "{{ backup_vault_password_file }}"
+      delegate_to: localhost
+      become: false
+      register: backup_vault_password
+
+    - name: Stop without a vault password file
+      ansible.builtin.assert:
+        that: backup_vault_password.stat.exists
+        fail_msg: "Create {{ backup_vault_password_file }} first (README, Backups)."
+        quiet: true
+
+    - name: Create the backup directory
+      ansible.builtin.file:
+        path: "{{ backup_dir }}"
+        state: directory
+        mode: "0700"
+      delegate_to: localhost
+      become: false
+
+    - name: Read the .env
+      ansible.builtin.slurp:
+        src: "{{ assay_env_file }}"
+      register: backup_env
+      no_log: true
+
+    - name: Write it encrypted (never in plain text on this side)
+      ansible.builtin.command:
+        argv: [ansible-vault, encrypt, --vault-password-file, "{{ backup_vault_password_file }}", --output, "{{ backup_file }}", "-"]
+        stdin: "{{ backup_env.content | b64decode }}"
+        creates: "{{ backup_file }}"
+      delegate_to: localhost
+      become: false
+      no_log: true
+
+    - name: Keep the backup private
+      ansible.builtin.file:
+        path: "{{ backup_file }}"
+        mode: "0600"
+      delegate_to: localhost
+      become: false

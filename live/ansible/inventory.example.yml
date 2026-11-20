@@ -1,0 +1,7 @@
+---
+# Copy to inventory.yml (git-ignored: the repo is public, the server's address is not) and put in the server's IPv4
+# from the Netcup panel. Everything else is in group_vars/assay.yml.
+assay:
+  hosts:
+    netcup:
+      ansible_host: 203.0.113.10 # a documentation-only placeholder address
