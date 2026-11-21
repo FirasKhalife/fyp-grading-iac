@@ -201,6 +201,14 @@ cd ../../fyp-grading-frontend && npm ci && npx playwright install --with-deps ch
 (`--with-deps` asks for sudo to install Chromium's system libraries.) A `node_modules` installed from Windows has
 no Linux browsers, so run `npm ci` from WSL; set `ASSAY_FRONTEND_REPO` if that checkout is elsewhere.
 
+If WSL's Node is too old (Playwright needs 20+), run step 6 from Windows instead: `./verify.sh --skip-playwright`,
+then on the server `sudo assay-copy-limit lift`, then in PowerShell from the frontend checkout
+`$env:ASSAY_BASE_URL='https://assay.firaskhalife.dev'; npx playwright test -c playwright.real.config.ts`, then
+`sudo assay-copy-limit restore`.
+
+First run on the Netcup server (21 Nov 2026): edge, ports, smoke 27/27, API checks 64/64, security 36/36, and the
+browser suite 82 passed (1 skipped: it needs short-lived tokens).
+
 ## 5. Uptime check
 
 [`uptime.yml`](../.github/workflows/uptime.yml) runs every 15 minutes on GitHub: the landing page must answer with the
