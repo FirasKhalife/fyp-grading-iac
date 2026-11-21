@@ -16,5 +16,14 @@ KEYCLOAK_ADMIN_PASSWORD="$(env_value KEYCLOAK_ADMIN_PASSWORD)"
 ASSAY_SPA_ORIGIN="$(env_value PUBLIC_URL)"
 export KEYCLOAK_ADMIN_USER KEYCLOAK_ADMIN_PASSWORD ASSAY_SPA_ORIGIN
 
-"$script" "$container"
-log "realm settings applied, personas reset (origin $ASSAY_SPA_ORIGIN)"
+# Up to three tries: right after a deploy recreates keycloak-db, Keycloak's connection pool still holds connections
+# to the old database container, and the first admin call fails with "unknown_error" (seen on 21 Nov 2026). The
+# pool drops them after that failure. The script is safe to run again: it sets the same settings every time.
+for attempt in 1 2 3; do
+  if "$script" "$container"; then
+    log "realm settings applied, personas reset (origin $ASSAY_SPA_ORIGIN)"
+    exit 0
+  fi
+  [ "$attempt" = 3 ] || { log "attempt $attempt failed; trying again in 15 s"; sleep 15; }
+done
+die "the realm settings and persona reset failed three times; see: sudo assay-compose logs --tail 100 keycloak-server"
