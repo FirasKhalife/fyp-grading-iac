@@ -108,8 +108,10 @@ step "1. edge: landing page, HTTPS, closed paths"
   tok="$(curl -s "$URL/realms/assay/protocol/openid-connect/token" -d grant_type=password -d client_id=assay-spa \
     -d username=jane.smith -d "password=$PASSWORD" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("access_token",""))' 2>/dev/null)"
   check "persona sign-in at the token endpoint" test -n "$tok"
-  code="$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $tok" "$URL/api/notifications")"
-  check "the persona's token is accepted by the API ($code)" test "$code" = 200
+  # Without a demo copy the API answers 400 demo-session-required, and it only gets that far once the token is
+  # accepted (a rejected token gets 401 first).
+  code="$(curl -s -o "$TMP/api" -w '%{http_code}' -H "Authorization: Bearer $tok" "$URL/api/notifications")"
+  check "the persona's token is accepted by the API ($code)" grep -q demo-session-required "$TMP/api"
   # The services accept only tokens issued for the app's own clients (AUTH_ISSUER_URI and the client check): a
   # token from another client of the same realm, such as Keycloak's built-in admin-cli, must get 401. If the realm
   # doesn't issue admin-cli a token at all, there is nothing to reject.
